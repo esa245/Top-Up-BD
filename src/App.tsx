@@ -29,9 +29,20 @@ import {
   User,
   LogOut,
   CreditCard,
-  Smartphone
+  Smartphone,
+  Eye,
+  EyeOff,
+  Mail,
+  Lock,
+  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase Client
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://deqbjwcgpjnlkafucbxr.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlcWJqd2NncGpubGthZnVjYnhyIiwicm9sZSI6ImRlcWJqd2NncGpubGthZnVjYnhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjUwMTMsImV4cCI6MjA4NzcwMTAxM30.zNQpwRS3vTkLuvURxWELB4bHynrP7OajfG69QO6B1ZMZM';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Types
 interface ApiService {
@@ -83,10 +94,28 @@ interface PaymentRecord {
   createdAt: string;
 }
 
+interface UserData {
+  userId: string;
+  email: string;
+  name: string;
+  balance: number;
+}
+
 const USD_TO_BDT = 120;
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserData | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
   const [view, setView] = useState<'user' | 'admin'>('user');
+  const [adminTab, setAdminTab] = useState<'orders' | 'users'>('orders');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [activeTab, setActiveTab] = useState<'new-order' | 'orders' | 'add-funds' | 'support' | 'account'>('new-order');
   const [step, setStep] = useState<'form' | 'payment'>('form');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -157,14 +186,14 @@ export default function App() {
           grouped[svc.category].services.push({
             id: svc.service.toString(),
             name: svc.name,
-            ratePer1000: parseFloat(svc.rate) * USD_TO_BDT,
+            ratePer1000: (parseFloat(svc.rate) * USD_TO_BDT) + 5,
             min: parseInt(svc.min),
             max: parseInt(svc.max),
             description: [
               `Type: ${svc.type}`,
               `Refill: ${svc.refill ? 'Yes' : 'No'}`,
               `Cancel: ${svc.cancel ? 'Yes' : 'No'}`,
-              `Rate: ৳${(parseFloat(svc.rate) * USD_TO_BDT).toFixed(2)} per 1000`
+              `Rate: ৳${((parseFloat(svc.rate) * USD_TO_BDT) + 5).toFixed(2)} per 1000`
             ]
           });
         });
@@ -186,10 +215,125 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setCurrentUser({
+            userId: profile.user_id,
+            email: session.user.email!,
+            name: profile.full_name,
+            balance: profile.balance
+          });
+          setIsLoggedIn(true);
+        }
+      }
+      
+      // Fetch all users for admin
+      const { data: users } = await supabase
+        .from('profiles')
+        .select('*');
+      
+      if (users) {
+        setAllUsers(users.map(u => ({
+          userId: u.user_id,
+          email: u.email,
+          name: u.full_name,
+          balance: u.balance
+        })));
+      }
+      setIsLoading(false);
+    };
+
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile) {
+          setCurrentUser({
+            userId: profile.user_id,
+            email: session.user.email!,
+            name: profile.full_name,
+            balance: profile.balance
+          });
+          setIsLoggedIn(true);
+        }
+      } else {
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      if (authMode === 'signup') {
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: authEmail,
+          password: authPassword,
+        });
+
+        if (authError) throw authError;
+
+        if (authData.user) {
+          const randomId = Math.floor(1000 + Math.random() * 9000);
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert([
+              { 
+                id: authData.user.id,
+                user_id: `TUBD-${randomId}`,
+                full_name: authName,
+                email: authEmail,
+                balance: 0
+              }
+            ]);
+          
+          if (profileError) throw profileError;
+          alert("Account created! Please check your email for verification.");
+        }
+      } else {
+        const { error: loginError } = await supabase.auth.signInWithPassword({
+          email: authEmail,
+          password: authPassword,
+        });
+
+        if (loginError) throw loginError;
+      }
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsLoggedIn(false);
+    setCurrentUser(null);
+  };
+
+  useEffect(() => {
     if (selectedService && quantity) {
       const qty = parseInt(quantity) || 0;
       const calculatedCharge = (qty / 1000) * selectedService.ratePer1000;
-      setCharge(calculatedCharge);
+      setCharge(calculatedCharge + 5);
     } else {
       setCharge(0);
     }
@@ -282,8 +426,7 @@ export default function App() {
   const startLongPress = () => {
     longPressTimer.current = setTimeout(() => {
       setView(prev => prev === 'user' ? 'admin' : 'user');
-      alert(view === 'user' ? 'Admin Mode Activated' : 'User Mode Activated');
-    }, 3000); // 3 seconds long press
+    }, 2000); // 2 seconds long press
   };
 
   const stopLongPress = () => {
@@ -340,95 +483,164 @@ export default function App() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-slate-800 p-6 rounded-3xl border border-slate-700">
               <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Total Orders</p>
               <p className="text-3xl font-black">{orders.length}</p>
+            </div>
+            <div className="bg-slate-800 p-6 rounded-3xl border border-slate-700">
+              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Total Users</p>
+              <p className="text-3xl font-black text-indigo-500">{allUsers.length}</p>
             </div>
             <div className="bg-slate-800 p-6 rounded-3xl border border-slate-700">
               <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Pending</p>
               <p className="text-3xl font-black text-amber-500">{orders.filter(o => o.status === 'pending').length}</p>
             </div>
             <div className="bg-slate-800 p-6 rounded-3xl border border-slate-700">
-              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Total Revenue</p>
-              <p className="text-3xl font-black text-emerald-500">৳{orders.reduce((acc, o) => acc + o.charge, 0).toFixed(2)}</p>
+              <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-1">Revenue</p>
+              <p className="text-3xl font-black text-emerald-500">৳{orders.reduce((acc, o) => acc + o.charge, 0).toFixed(0)}</p>
             </div>
           </div>
 
           <div className="bg-slate-800 rounded-3xl border border-slate-700 overflow-hidden">
-            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-              <h2 className="font-bold flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-500" /> Recent Orders
-              </h2>
+            <div className="p-2 border-b border-slate-700 flex">
+              <button 
+                onClick={() => setAdminTab('orders')}
+                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${adminTab === 'orders' ? 'text-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <History className="w-4 h-4" /> Orders
+              </button>
+              <button 
+                onClick={() => setAdminTab('users')}
+                className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${adminTab === 'users' ? 'text-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <Users className="w-4 h-4" /> Users
+              </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-700/50 text-xs uppercase font-bold text-slate-400">
-                  <tr>
-                    <th className="px-6 py-4">Order ID</th>
-                    <th className="px-6 py-4">Service</th>
-                    <th className="px-6 py-4">Link</th>
-                    <th className="px-6 py-4">Charge</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700">
-                  {orders.length === 0 ? (
+
+            {adminTab === 'orders' ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-700/50 text-xs uppercase font-bold text-slate-400">
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">No orders found</td>
+                      <th className="px-6 py-4">Order ID</th>
+                      <th className="px-6 py-4">Service</th>
+                      <th className="px-6 py-4">Link</th>
+                      <th className="px-6 py-4">Charge</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4">Actions</th>
                     </tr>
-                  ) : (
-                    orders.map(order => (
-                      <tr key={order.id} className="hover:bg-slate-700/30 transition-colors">
-                        <td className="px-6 py-4">
-                          <p className="font-mono text-xs font-bold">{order.id}</p>
-                          <p className="text-[10px] text-slate-500">{order.createdAt}</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-sm font-bold truncate max-w-[150px]">{order.service}</p>
-                          <p className="text-xs text-slate-400">Qty: {order.quantity}</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <a href={order.link} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline flex items-center gap-1 text-xs">
-                            Visit <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </td>
-                        <td className="px-6 py-4 font-bold text-emerald-500">৳{order.charge.toFixed(2)}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                            order.status === 'pending' ? 'bg-amber-500/20 text-amber-500' :
-                            order.status === 'completed' ? 'bg-emerald-500/20 text-emerald-500' :
-                            order.status === 'processing' || order.status === 'in progress' ? 'bg-indigo-500/20 text-indigo-500' :
-                            'bg-rose-500/20 text-rose-500'
-                          }`}>
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => refreshOrderStatus(order.id)}
-                              className="p-2 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white rounded-lg transition-all"
-                              title="Refresh Status"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => deleteOrder(order.id)}
-                              className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"
-                              title="Delete Order"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700">
+                    {orders.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-slate-500">No orders found</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ) : (
+                      orders.map(order => (
+                        <tr key={order.id} className="hover:bg-slate-700/30 transition-colors">
+                          <td className="px-6 py-4">
+                            <p className="font-mono text-xs font-bold">{order.id}</p>
+                            <p className="text-[10px] text-slate-500">{order.createdAt}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-bold truncate max-w-[150px]">{order.service}</p>
+                            <p className="text-xs text-slate-400">Qty: {order.quantity}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <a href={order.link} target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline flex items-center gap-1 text-xs">
+                              Visit <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-emerald-500">৳{order.charge.toFixed(2)}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${
+                              order.status === 'pending' ? 'bg-amber-500/20 text-amber-500' :
+                              order.status === 'completed' ? 'bg-emerald-500/20 text-emerald-500' :
+                              order.status === 'processing' || order.status === 'in progress' ? 'bg-indigo-500/20 text-indigo-500' :
+                              'bg-rose-500/20 text-rose-500'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={() => refreshOrderStatus(order.id)}
+                                className="p-2 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white rounded-lg transition-all"
+                                title="Refresh Status"
+                              >
+                                <RefreshCw className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => deleteOrder(order.id)}
+                                className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white rounded-lg transition-all"
+                                title="Delete Order"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 border-b border-slate-700">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input 
+                      type="text"
+                      placeholder="Search User by ID, Name or Email..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-700/50 text-xs uppercase font-bold text-slate-400">
+                      <tr>
+                        <th className="px-6 py-4">User ID</th>
+                        <th className="px-6 py-4">Name</th>
+                        <th className="px-6 py-4">Email</th>
+                        <th className="px-6 py-4">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700">
+                      {allUsers.filter(u => 
+                        u.userId.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                        u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                        u.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+                      ).length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-12 text-center text-slate-500">No users found</td>
+                        </tr>
+                      ) : (
+                        allUsers.filter(u => 
+                          u.userId.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                          u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                          u.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+                        ).map(user => (
+                          <tr key={user.userId} className="hover:bg-slate-700/30 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="font-mono text-xs font-bold text-indigo-400">{user.userId}</p>
+                            </td>
+                            <td className="px-6 py-4 font-bold text-sm">{user.name}</td>
+                            <td className="px-6 py-4 text-sm text-slate-400">{user.email}</td>
+                            <td className="px-6 py-4 font-bold text-emerald-500">৳{user.balance.toFixed(2)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -465,6 +677,119 @@ export default function App() {
     );
   }
 
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
+        </div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-500/10 border border-slate-100 overflow-hidden relative z-10"
+        >
+          <div className="p-8 pb-4 text-center">
+            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-200 rotate-3">
+              <TrendingUp className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Top Up BD</h1>
+            <p className="text-slate-500 mt-2 font-medium">
+              {authMode === 'login' ? 'Welcome back! Please login.' : 'Create an account to get started.'}
+            </p>
+          </div>
+
+          <div className="p-8 pt-4">
+            <form onSubmit={handleAuth} className="space-y-4">
+              <AnimatePresence mode="wait">
+                {authMode === 'signup' && (
+                  <motion.div
+                    key="name"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-2"
+                  >
+                    <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <input 
+                        type="text"
+                        required
+                        placeholder="John Doe"
+                        value={authName}
+                        onChange={(e) => setAuthName(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input 
+                    type="email"
+                    required
+                    placeholder="name@example.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input 
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2"
+              >
+                {authMode === 'login' ? <LogOut className="w-5 h-5 rotate-180" /> : <UserPlus className="w-5 h-5" />}
+                {authMode === 'login' ? 'Login Now' : 'Create Account'}
+              </button>
+            </form>
+
+            <div className="mt-8 text-center">
+              <p className="text-slate-500 text-sm font-medium">
+                {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
+                <button 
+                  onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+                  className="ml-2 text-indigo-600 font-bold hover:underline"
+                >
+                  {authMode === 'login' ? 'Sign Up' : 'Login'}
+                </button>
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       {/* Header */}
@@ -488,13 +813,11 @@ export default function App() {
               <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Balance</span>
               <span className="text-sm font-bold text-emerald-600">৳ {parseFloat(balance).toFixed(2)}</span>
             </div>
-            <div className="flex gap-3">
-              <button 
-                onClick={() => setActiveTab('account')}
-                className={`p-2 rounded-full transition-colors ${activeTab === 'account' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}
-              >
-                <User className="w-5 h-5" />
-              </button>
+            <div 
+              onClick={() => setActiveTab('account')}
+              className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-200 transition-colors overflow-hidden"
+            >
+              <img src="https://picsum.photos/seed/user/100/100" alt="User" referrerPolicy="no-referrer" />
             </div>
           </div>
         </div>
@@ -857,7 +1180,7 @@ export default function App() {
                       onChange={(e) => setFundAmount(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-bold text-lg"
                     />
-                    <p className="text-[10px] text-slate-400 font-medium">Note: ৳7 surcharge will be added to your payment.</p>
+                    <p className="text-[10px] text-slate-400 font-medium">Note: ৳12 surcharge will be added to your payment.</p>
                   </div>
                   <button 
                     onClick={() => {
@@ -903,7 +1226,7 @@ export default function App() {
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${paymentMethod === 'nagad' ? 'bg-orange-100 text-orange-600' : 'bg-pink-100 text-pink-600'}`}>3</div>
                       <div className="flex-1">
                         <p className="text-sm text-slate-600 leading-relaxed">টাকার পরিমাণ (Surcharge সহ):</p>
-                        <p className="text-3xl font-black text-slate-900 mt-1">৳ {parseFloat(fundAmount) + 7} BDT</p>
+                        <p className="text-3xl font-black text-slate-900 mt-1">৳ {parseFloat(fundAmount) + 12} BDT</p>
                         <p className="text-[10px] text-slate-400 mt-1">আপনার ব্যালেন্সে ৳{fundAmount} যোগ হবে।</p>
                       </div>
                     </div>
@@ -997,7 +1320,7 @@ export default function App() {
               
               <div className="space-y-3">
                 <a 
-                  href="https://t.me/motherpanel" 
+                  href="https://t.me/topupbd1103" 
                   target="_blank" 
                   rel="noreferrer"
                   className="w-full bg-[#229ED9] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-opacity"
@@ -1005,12 +1328,12 @@ export default function App() {
                   <Send className="w-5 h-5" /> Contact on Telegram
                 </a>
                 <a 
-                  href={`https://wa.me/88${paymentNumbers.nagad}`} 
+                  href="https://chat.whatsapp.com/CtoQA0FhBNXCjDYlzpI1xr?mode=gi_t" 
                   target="_blank" 
                   rel="noreferrer"
                   className="w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-opacity"
                 >
-                  <MessageCircle className="w-5 h-5" /> Contact on WhatsApp
+                  <MessageCircle className="w-5 h-5" /> Join WhatsApp Group
                 </a>
               </div>
             </div>
@@ -1020,7 +1343,14 @@ export default function App() {
                 <p className="text-indigo-100 text-xs font-bold uppercase tracking-wider mb-1">Join Community</p>
                 <p className="text-lg font-bold">Get latest updates</p>
               </div>
-              <button className="bg-white text-indigo-600 px-4 py-2 rounded-xl font-bold text-sm">Join Now</button>
+              <a 
+                href="https://t.me/topupbd1103" 
+                target="_blank" 
+                rel="noreferrer"
+                className="bg-white text-indigo-600 px-4 py-2 rounded-xl font-bold text-sm"
+              >
+                Join Now
+              </a>
             </div>
           </motion.div>
         )}
@@ -1040,8 +1370,9 @@ export default function App() {
                   <div className="absolute bottom-0 right-0 w-6 h-6 bg-emerald-500 border-2 border-white rounded-full" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900">mdesaalli74@gmail.com</h3>
-                  <p className="text-slate-400 text-sm">Member since Feb 2026</p>
+                  <h3 className="text-xl font-bold text-slate-900">{currentUser?.name || currentUser?.email}</h3>
+                  <p className="text-slate-400 text-sm font-mono font-bold">ID: {currentUser?.userId}</p>
+                  <p className="text-slate-400 text-[10px]">Member since Feb 2026</p>
                 </div>
               </div>
 
@@ -1054,6 +1385,21 @@ export default function App() {
                   <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Total Spent</p>
                   <p className="text-xl font-black text-indigo-600">৳{orders.reduce((acc, o) => acc + o.charge, 0).toFixed(2)}</p>
                 </div>
+              </div>
+
+              <div className="mt-8 space-y-3">
+                <button 
+                  onClick={handleLogout}
+                  className="w-full flex items-center justify-between p-4 bg-rose-50 rounded-2xl hover:bg-rose-100 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                      <LogOut className="w-5 h-5 text-rose-500" />
+                    </div>
+                    <span className="font-bold text-rose-600">Logout</span>
+                  </div>
+                  <ChevronDown className="w-5 h-5 text-rose-200 -rotate-90" />
+                </button>
               </div>
             </div>
 
@@ -1076,7 +1422,10 @@ export default function App() {
                 </div>
                 <ChevronDown className="w-5 h-5 text-slate-300 -rotate-90" />
               </button>
-              <button className="w-full p-5 flex items-center justify-between hover:bg-slate-50 transition-colors text-rose-500">
+              <button 
+                onClick={handleLogout}
+                className="w-full p-5 flex items-center justify-between hover:bg-slate-50 transition-colors text-rose-500"
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center">
                     <LogOut className="w-5 h-5" />
