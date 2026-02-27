@@ -119,24 +119,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                 </form>
 
-                <div className="mt-6 flex items-center gap-4">
-                  <div className="flex-1 h-px bg-slate-100"></div>
-                  <span className="text-slate-400 text-xs font-bold uppercase">Or continue with</span>
-                  <div className="flex-1 h-px bg-slate-100"></div>
-                </div>
-
-                <button 
-                  type="button"
-                  onClick={() => {
-                    // This will be handled in App.tsx
-                    window.dispatchEvent(new CustomEvent('google-login'));
-                  }}
-                  className="w-full bg-white border border-slate-200 text-slate-700 py-4 rounded-2xl font-bold text-lg shadow-sm hover:bg-slate-50 transition-all mt-6 flex items-center justify-center gap-3"
-                >
-                  <img src="https://www.svgrepo.com/show/475656/google_color.svg" alt="Google" className="w-6 h-6" />
-                  Google Account
-                </button>
-
                 <div className="mt-8 text-center">
                   <p className="text-slate-500 text-sm font-medium">
                     Don't have an account?

@@ -229,27 +229,9 @@ export default function App() {
       }
     });
 
-    // Listen for Google Login event from AuthModal
-    const handleGoogleLoginEvent = async () => {
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin
-          }
-        });
-        if (error) throw error;
-      } catch (error: any) {
-        alert("Google Login Error: " + error.message);
-      }
-    };
-
-    window.addEventListener('google-login', handleGoogleLoginEvent);
-
     return () => {
       clearTimeout(globalTimeout);
       subscription.unsubscribe();
-      window.removeEventListener('google-login', handleGoogleLoginEvent);
     };
   }, []);
 
