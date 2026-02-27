@@ -34,7 +34,8 @@ import {
   EyeOff,
   Mail,
   Lock,
-  UserPlus
+  UserPlus,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@supabase/supabase-js';
@@ -112,6 +113,7 @@ export default function App() {
   const [authName, setAuthName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const [view, setView] = useState<'user' | 'admin'>('user');
   const [adminTab, setAdminTab] = useState<'orders' | 'users'>('orders');
@@ -330,7 +332,7 @@ export default function App() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setIsAuthLoading(true);
     try {
       if (authMode === 'signup') {
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -374,7 +376,7 @@ export default function App() {
     } catch (error: any) {
       alert(error.message);
     } finally {
-      setIsLoading(false);
+      setIsAuthLoading(false);
     }
   };
 
@@ -744,7 +746,7 @@ export default function App() {
     );
   }
 
-  if (!isLoggedIn) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
         <div className="flex flex-col items-center justify-center gap-4">
@@ -1507,11 +1509,11 @@ export default function App() {
 
                     <button 
                       type="submit"
-                      disabled={isLoading}
+                      disabled={isAuthLoading}
                       className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
                     >
-                      {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5 rotate-180" />}
-                      {isLoading ? 'Logging in...' : 'Login Now'}
+                      {isAuthLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5 rotate-180" />}
+                      {isAuthLoading ? 'Logging in...' : 'Login Now'}
                     </button>
                   </form>
 
@@ -1593,11 +1595,11 @@ export default function App() {
 
                     <button 
                       type="submit"
-                      disabled={isLoading}
+                      disabled={isAuthLoading}
                       className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
                     >
-                      {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
-                      {isLoading ? 'Creating Account...' : 'Create Account'}
+                      {isAuthLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
+                      {isAuthLoading ? 'Creating Account...' : 'Create Account'}
                     </button>
                   </form>
 
