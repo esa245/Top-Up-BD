@@ -18,17 +18,20 @@ async function startServer() {
     try {
       const { action, ...params } = req.body;
       
-      const formData = new FormData();
-      formData.append("key", API_KEY);
-      formData.append("action", action);
+      const body = new URLSearchParams();
+      body.append("key", API_KEY);
+      body.append("action", action);
       
       Object.entries(params).forEach(([key, value]) => {
-        formData.append(key, String(value));
+        body.append(key, String(value));
       });
 
       const response = await fetch(API_URL, {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body.toString(),
       });
 
       const text = await response.text();
