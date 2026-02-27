@@ -6,6 +6,7 @@ import { paymentNumbers } from '../constants';
 
 interface NewOrderProps {
   isLoading: boolean;
+  isRealServices: boolean;
   categories: Category[];
   selectedCategory: Category | null;
   selectedService: Service | null;
@@ -25,10 +26,12 @@ interface NewOrderProps {
   onVerify: () => void;
   onSetStep: (step: 'form' | 'payment') => void;
   onCopy: (text: string | number) => void;
+  onRefreshServices: () => void;
 }
 
 export const NewOrder: React.FC<NewOrderProps> = ({
   isLoading,
+  isRealServices,
   categories,
   selectedCategory,
   selectedService,
@@ -47,7 +50,8 @@ export const NewOrder: React.FC<NewOrderProps> = ({
   onSubmitOrder,
   onVerify,
   onSetStep,
-  onCopy
+  onCopy,
+  onRefreshServices
 }) => {
   if (isLoading) {
     return (
@@ -83,9 +87,23 @@ export const NewOrder: React.FC<NewOrderProps> = ({
         >
           {/* Category Selection */}
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-600 flex items-center gap-2">
-              Category
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-semibold text-slate-600 flex items-center gap-2">
+                Category
+              </label>
+              {isRealServices ? (
+                <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Zap className="w-2.5 h-2.5" /> Real Services
+                </span>
+              ) : (
+                <button 
+                  onClick={onRefreshServices}
+                  className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                >
+                  <Zap className="w-2.5 h-2.5" /> Load Real Services
+                </button>
+              )}
+            </div>
             <div className="relative">
               <select 
                 value={selectedCategory?.id || ''}

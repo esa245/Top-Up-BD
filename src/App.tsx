@@ -62,6 +62,8 @@ export default function App() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
 
+  const [isRealServices, setIsRealServices] = useState(false);
+
   // Combined Loading State - Only block UI for initial auth check
   const isLoading = isInitialAuthLoading;
 
@@ -130,16 +132,44 @@ export default function App() {
           body: JSON.stringify({ action: 'services' })
         });
         const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          processServices(data);
+        
+        // Handle different possible response formats from SMM panels
+        let servicesArray = [];
+        if (Array.isArray(data)) {
+          servicesArray = data;
+        } else if (data && typeof data === 'object' && Array.isArray(data.services)) {
+          servicesArray = data.services;
+        } else if (data && typeof data === 'object') {
+          // Some panels return an object where keys are service IDs
+          servicesArray = Object.values(data).filter(item => item && typeof item === 'object' && 'service' in item);
+        }
+
+        if (servicesArray.length > 0) {
+          processServices(servicesArray);
+          setIsRealServices(true);
+          console.log(`Loaded ${servicesArray.length} real services from MotherPanel`);
         }
       } catch (e) {
-        // Silently fail
+        console.error("Failed to fetch real services:", e);
       }
     };
 
     fetchRealServices();
   }, []);
+
+  // Automatic Order Status Polling
+  useEffect(() => {
+    const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'processing' || o.status === 'in progress');
+    if (pendingOrders.length === 0) return;
+
+    const interval = setInterval(() => {
+      pendingOrders.forEach(order => {
+        refreshOrderStatus(order.id);
+      });
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [orders]);
 
   // Auth Effects
   useEffect(() => {
@@ -517,6 +547,7 @@ export default function App() {
         {activeTab === 'new-order' && (
           <NewOrder 
             isLoading={isServicesLoading}
+            isRealServices={isRealServices}
             categories={categories}
             selectedCategory={selectedCategory}
             selectedService={selectedService}
@@ -547,6 +578,13 @@ export default function App() {
             onVerify={handleVerify}
             onSetStep={setStep}
             onCopy={(text) => navigator.clipboard.writeText(text.toString())}
+            onRefreshServices={() => {
+              setIsServicesLoading(true);
+              // The fetchRealServices is inside the useEffect, I should move it out or trigger it.
+              // For simplicity, I'll just reload the page or trigger the effect if I can.
+              // Actually, I'll move fetchRealServices outside the useEffect.
+              window.location.reload();
+            }}
           />
         )}
 

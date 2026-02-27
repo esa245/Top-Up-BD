@@ -1,6 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import { MOTHER_PANEL_CONFIG } from "./motherpanel.config";
 
 dotenv.config();
 
@@ -10,23 +11,20 @@ async function startServer() {
 
   app.use(express.json());
 
-  const API_URL = "https://motherpanel.com/api/v2";
-  const API_KEY = process.env.MOTHER_PANEL_API_KEY || "b0ef21942953387ad901b31cd523fdb8";
-
   // Proxy for Top Up BD API
   app.post("/api/proxy", async (req, res) => {
     try {
       const { action, ...params } = req.body;
       
       const body = new URLSearchParams();
-      body.append("key", API_KEY);
+      body.append("key", MOTHER_PANEL_CONFIG.API_KEY);
       body.append("action", action);
       
       Object.entries(params).forEach(([key, value]) => {
         body.append(key, String(value));
       });
 
-      const response = await fetch(API_URL, {
+      const response = await fetch(MOTHER_PANEL_CONFIG.API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded"
