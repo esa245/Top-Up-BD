@@ -291,6 +291,41 @@ export default function App() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await fetchAndSetProfile(session.user);
+      } else {
+        // Auto-login logic
+        let localEmail = localStorage.getItem('tubd_email');
+        let localPass = localStorage.getItem('tubd_pass');
+        
+        if (!localEmail || !localPass) {
+          localEmail = `guest_${Date.now()}@topupbd.com`;
+          localPass = `pass_${Math.random().toString(36).slice(-8)}`;
+          localStorage.setItem('tubd_email', localEmail);
+          localStorage.setItem('tubd_pass', localPass);
+          
+          const { data, error } = await supabase.auth.signUp({ 
+            email: localEmail, 
+            password: localPass,
+            options: { data: { full_name: 'Guest User' } }
+          });
+          
+          if (data.user) {
+            await fetchAndSetProfile(data.user);
+          }
+        } else {
+          const { data, error } = await supabase.auth.signInWithPassword({ 
+            email: localEmail, 
+            password: localPass 
+          });
+          if (data.user) {
+            await fetchAndSetProfile(data.user);
+          } else {
+            // If login fails, clear and retry
+            localStorage.removeItem('tubd_email');
+            localStorage.removeItem('tubd_pass');
+            checkUser();
+            return;
+          }
+        }
       }
       
       // Fetch all users for admin
@@ -314,9 +349,6 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         await fetchAndSetProfile(session.user);
-      } else {
-        setIsLoggedIn(false);
-        setCurrentUser(null);
       }
     });
 
@@ -728,191 +760,16 @@ export default function App() {
   }
 
   if (!isLoggedIn) {
-    if (authMode === 'login') {
-      return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
-            <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
+        <div className="flex flex-col items-center justify-center gap-4">
+          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 animate-pulse">
+            <TrendingUp className="w-8 h-8 text-white" />
           </div>
-
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-500/10 border border-slate-100 overflow-hidden relative z-10"
-          >
-            <div className="p-8 pb-4 text-center">
-              <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-200 rotate-3">
-                <TrendingUp className="w-8 h-8 text-white" />
-              </div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Welcome Back</h1>
-              <p className="text-slate-500 mt-2 font-medium">Please login to your account.</p>
-            </div>
-
-            <div className="p-8 pt-4">
-              <form onSubmit={handleAuth} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input 
-                      type="email"
-                      required
-                      placeholder="name@example.com"
-                      value={authEmail}
-                      onChange={(e) => setAuthEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input 
-                      type={showPassword ? "text" : "password"}
-                      required
-                      placeholder="••••••••"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <button 
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
-                >
-                  {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5 rotate-180" />}
-                  {isLoading ? 'Logging in...' : 'Login Now'}
-                </button>
-              </form>
-
-              <div className="mt-8 text-center">
-                <p className="text-slate-500 text-sm font-medium">
-                  Don't have an account?
-                  <button 
-                    onClick={() => setAuthMode('signup')}
-                    className="ml-2 text-indigo-600 font-bold hover:underline"
-                  >
-                    Create Account
-                  </button>
-                </p>
-              </div>
-            </div>
-          </motion.div>
+          <p className="text-slate-500 font-bold animate-pulse">Loading Top Up BD...</p>
         </div>
-      );
-    } else {
-      return (
-        <div className="min-h-screen bg-indigo-50 flex items-center justify-center p-4 font-sans">
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-0 left-0 w-full h-96 bg-indigo-600 rounded-b-[4rem] shadow-2xl" />
-          </div>
-
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-900/20 border border-slate-100 overflow-hidden relative z-10"
-          >
-            <div className="p-8 pb-4 text-center">
-              <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-                <UserPlus className="w-8 h-8 text-indigo-600" />
-              </div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Join Top Up BD</h1>
-              <p className="text-slate-500 mt-2 font-medium">Create an account to get started.</p>
-            </div>
-
-            <div className="p-8 pt-4">
-              <form onSubmit={handleAuth} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
-                  <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input 
-                      type="text"
-                      required
-                      placeholder="John Doe"
-                      value={authName}
-                      onChange={(e) => setAuthName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input 
-                      type="email"
-                      required
-                      placeholder="name@example.com"
-                      value={authEmail}
-                      onChange={(e) => setAuthEmail(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input 
-                      type={showPassword ? "text" : "password"}
-                      required
-                      placeholder="••••••••"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <button 
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
-                >
-                  {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
-                  {isLoading ? 'Creating Account...' : 'Create Account'}
-                </button>
-              </form>
-
-              <div className="mt-8 text-center">
-                <p className="text-slate-500 text-sm font-medium">
-                  Already have an account?
-                  <button 
-                    onClick={() => setAuthMode('login')}
-                    className="ml-2 text-indigo-600 font-bold hover:underline"
-                  >
-                    Login Here
-                  </button>
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      );
-    }
+      </div>
+    );
   }
 
   return (
@@ -1510,21 +1367,6 @@ export default function App() {
                   <p className="text-[10px] text-slate-400 uppercase font-bold mb-1">Total Spent</p>
                   <p className="text-xl font-black text-indigo-600">৳{orders.reduce((acc, o) => acc + o.charge, 0).toFixed(2)}</p>
                 </div>
-              </div>
-
-              <div className="mt-8 space-y-3">
-                <button 
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-between p-4 bg-rose-50 rounded-2xl hover:bg-rose-100 transition-colors group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                      <LogOut className="w-5 h-5 text-rose-500" />
-                    </div>
-                    <span className="font-bold text-rose-600">Logout</span>
-                  </div>
-                  <ChevronDown className="w-5 h-5 text-rose-200 -rotate-90" />
-                </button>
               </div>
             </div>
 
