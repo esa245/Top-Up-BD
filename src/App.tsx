@@ -62,40 +62,18 @@ export default function App() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
 
-  // Combined Loading State
-  const isLoading = isServicesLoading || isInitialAuthLoading;
+  // Combined Loading State - Only block UI for initial auth check
+  const isLoading = isInitialAuthLoading;
 
   // Fetch Services
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsServicesLoading(true);
-        const response = await fetch('/api/proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'services' })
-        });
-        const data = await response.json();
-        
-        if (Array.isArray(data) && data.length > 0) {
-          processServices(data);
-        } else {
-          console.warn("Could not fetch real services, using fallback.");
-          const dummyServices = [
-            { category: 'Facebook Services', service: 1, name: 'Facebook Page Likes', rate: '0.50', min: '100', max: '10000', type: 'Default', refill: true, cancel: false },
-            { category: 'Facebook Services', service: 2, name: 'Facebook Post Likes', rate: '0.10', min: '100', max: '50000', type: 'Default', refill: false, cancel: false },
-            { category: 'TikTok Services', service: 3, name: 'TikTok Views', rate: '0.01', min: '1000', max: '1000000', type: 'Default', refill: false, cancel: false },
-            { category: 'Instagram Services', service: 5, name: 'Instagram Followers', rate: '0.80', min: '100', max: '50000', type: 'Default', refill: true, cancel: true },
-            { category: 'YouTube Services', service: 9, name: 'YouTube Subscribers', rate: '2.50', min: '100', max: '5000', type: 'Default', refill: true, cancel: true },
-          ];
-          processServices(dummyServices);
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setIsServicesLoading(false);
-      }
-    };
+    const fallbackServices = [
+      { category: 'Facebook Services', service: 1, name: 'Facebook Page Likes', rate: '0.50', min: '100', max: '10000', type: 'Default', refill: true, cancel: false },
+      { category: 'Facebook Services', service: 2, name: 'Facebook Post Likes', rate: '0.10', min: '100', max: '50000', type: 'Default', refill: false, cancel: false },
+      { category: 'TikTok Services', service: 3, name: 'TikTok Views', rate: '0.01', min: '1000', max: '1000000', type: 'Default', refill: false, cancel: false },
+      { category: 'Instagram Services', service: 5, name: 'Instagram Followers', rate: '0.80', min: '100', max: '50000', type: 'Default', refill: true, cancel: true },
+      { category: 'YouTube Services', service: 9, name: 'YouTube Subscribers', rate: '2.50', min: '100', max: '5000', type: 'Default', refill: true, cancel: true },
+    ];
 
     const processServices = (data: any[]) => {
       const grouped: { [key: string]: Category } = {};
@@ -139,7 +117,28 @@ export default function App() {
       }
     };
 
-    fetchData();
+    // Initialize with fallback immediately
+    processServices(fallbackServices);
+    setIsServicesLoading(false);
+
+    // Try to fetch real services in background without blocking
+    const fetchRealServices = async () => {
+      try {
+        const response = await fetch('/api/proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'services' })
+        });
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          processServices(data);
+        }
+      } catch (e) {
+        // Silently fail
+      }
+    };
+
+    fetchRealServices();
   }, []);
 
   // Auth Effects
@@ -196,11 +195,18 @@ export default function App() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          await fetchAndSetProfile(session.user);
+          // Start fetching profile but don't block the initial loading screen if it's slow
+          fetchAndSetProfile(session.user).finally(() => {
+            setIsInitialAuthLoading(false);
+          });
+          
+          // Safety fallback: if profile takes > 2s, show the app anyway
+          setTimeout(() => setIsInitialAuthLoading(false), 2000);
+        } else {
+          setIsInitialAuthLoading(false);
         }
       } catch (err) {
         console.error("Session check error:", err);
-      } finally {
         setIsInitialAuthLoading(false);
       }
     };
@@ -220,7 +226,27 @@ export default function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Listen for Google Login event from AuthModal
+    const handleGoogleLoginEvent = async () => {
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin
+          }
+        });
+        if (error) throw error;
+      } catch (error: any) {
+        alert("Google Login Error: " + error.message);
+      }
+    };
+
+    window.addEventListener('google-login', handleGoogleLoginEvent);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('google-login', handleGoogleLoginEvent);
+    };
   }, []);
 
   // Handlers
@@ -461,6 +487,30 @@ export default function App() {
     );
   }
 
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-50 font-sans">
+        <AuthModal 
+          show={true}
+          mode={authMode}
+          email={authEmail}
+          password={authPassword}
+          name={authName}
+          showPassword={showPassword}
+          isLoading={isAuthLoading}
+          isClosable={false}
+          onClose={() => {}}
+          onModeChange={setAuthMode}
+          onEmailChange={setAuthEmail}
+          onPasswordChange={setAuthPassword}
+          onNameChange={setAuthName}
+          onTogglePassword={() => setShowPassword(!showPassword)}
+          onSubmit={handleAuth}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       <Header 
@@ -473,7 +523,7 @@ export default function App() {
       <main className="max-w-lg mx-auto p-4 pb-24">
         {activeTab === 'new-order' && (
           <NewOrder 
-            isLoading={isLoading}
+            isLoading={isServicesLoading}
             categories={categories}
             selectedCategory={selectedCategory}
             selectedService={selectedService}

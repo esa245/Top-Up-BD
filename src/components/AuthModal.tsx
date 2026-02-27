@@ -10,6 +10,7 @@ interface AuthModalProps {
   name: string;
   showPassword: boolean;
   isLoading: boolean;
+  isClosable?: boolean;
   onClose: () => void;
   onModeChange: (mode: 'login' | 'signup') => void;
   onEmailChange: (val: string) => void;
@@ -27,6 +28,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   name,
   showPassword,
   isLoading,
+  isClosable = true,
   onClose,
   onModeChange,
   onEmailChange,
@@ -50,12 +52,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             exit={{ scale: 0.95, opacity: 0 }}
             className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden relative"
           >
-            <button 
-              onClick={onClose}
-              className="absolute top-6 right-6 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors z-10"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {isClosable && (
+              <button 
+                onClick={onClose}
+                className="absolute top-6 right-6 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
 
             {mode === 'login' ? (
               <div className="p-8">
@@ -114,6 +118,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     {isLoading ? 'Logging in...' : 'Login Now'}
                   </button>
                 </form>
+
+                <div className="mt-6 flex items-center gap-4">
+                  <div className="flex-1 h-px bg-slate-100"></div>
+                  <span className="text-slate-400 text-xs font-bold uppercase">Or continue with</span>
+                  <div className="flex-1 h-px bg-slate-100"></div>
+                </div>
+
+                <button 
+                  type="button"
+                  onClick={() => {
+                    // This will be handled in App.tsx
+                    window.dispatchEvent(new CustomEvent('google-login'));
+                  }}
+                  className="w-full bg-white border border-slate-200 text-slate-700 py-4 rounded-2xl font-bold text-lg shadow-sm hover:bg-slate-50 transition-all mt-6 flex items-center justify-center gap-3"
+                >
+                  <img src="https://www.svgrepo.com/show/475656/google_color.svg" alt="Google" className="w-6 h-6" />
+                  Google Account
+                </button>
 
                 <div className="mt-8 text-center">
                   <p className="text-slate-500 text-sm font-medium">
