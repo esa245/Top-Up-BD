@@ -201,6 +201,7 @@ export default function App() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           // Immediately show the app if session exists
+          setIsLoggedIn(true);
           setIsInitialAuthLoading(false);
           // Fetch profile in background
           fetchAndSetProfile(session.user);
@@ -218,6 +219,7 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          setIsLoggedIn(true);
           await fetchAndSetProfile(session.user);
           setShowAuthModal(false);
           setIsInitialAuthLoading(false);
@@ -350,7 +352,11 @@ export default function App() {
           createdAt: new Date().toLocaleString()
         };
         setOrders(prev => [newOrder, ...prev]);
-        setIsSuccess(true);
+        alert(`Order placed successfully! Order ID: ${orderData.order}`);
+        setStep('form');
+        setLink('');
+        setQuantity('');
+        setTransactionId('');
         setActiveTab('orders');
       } else {
         // Refund balance if order fails
@@ -502,6 +508,7 @@ export default function App() {
       <Header 
         isLoggedIn={isLoggedIn} 
         balance={balance} 
+        userName={currentUser?.name}
         onTabChange={handleTabChange} 
         onShowAuth={() => setShowAuthModal(true)} 
       />
