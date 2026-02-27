@@ -156,6 +156,11 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'balance' })
         });
+        
+        if (!balanceRes.ok) {
+          throw new Error(`HTTP error! status: ${balanceRes.status}`);
+        }
+        
         const balanceData = await balanceRes.json();
         if (balanceData.balance) {
           const bdtBalance = parseFloat(balanceData.balance) * USD_TO_BDT;
@@ -168,11 +173,27 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'services' })
         });
-        const servicesData: ApiService[] = await servicesRes.json();
+        
+        if (!servicesRes.ok) {
+          throw new Error(`HTTP error! status: ${servicesRes.status}`);
+        }
+        
+        const servicesData: any = await servicesRes.json();
+        
+        if (servicesData.error) {
+          console.error("MotherPanel API Error:", servicesData.error);
+          alert(`MotherPanel API Error: ${servicesData.error}\nPlease check your MOTHER_PANEL_API_KEY.`);
+          return;
+        }
+
+        if (!Array.isArray(servicesData)) {
+          console.error("Unexpected API response format:", servicesData);
+          return;
+        }
 
         // Group by Category
         const grouped: { [key: string]: Category } = {};
-        servicesData.forEach(svc => {
+        servicesData.forEach((svc: ApiService) => {
           if (!grouped[svc.category]) {
             const isFB = svc.category.toLowerCase().includes('facebook');
             const isTT = svc.category.toLowerCase().includes('tiktok');
@@ -216,7 +237,7 @@ export default function App() {
 
   useEffect(() => {
     const fetchAndSetProfile = async (user: any) => {
-      let { data: profile } = await supabase
+      let { data: profile, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
@@ -224,7 +245,7 @@ export default function App() {
       
       if (!profile) {
         const randomId = Math.floor(1000 + Math.random() * 9000);
-        const { data: newProfile, error } = await supabase
+        const { data: newProfile, error: insertError } = await supabase
           .from('profiles')
           .insert([{ 
             id: user.id,
@@ -236,7 +257,12 @@ export default function App() {
           .select()
           .single();
         
-        if (!error && newProfile) {
+        if (insertError) {
+          console.error("Error creating profile:", insertError);
+          alert("Database error: Please make sure you have created the 'profiles' table in Supabase SQL Editor.");
+        }
+        
+        if (!insertError && newProfile) {
           profile = newProfile;
         }
       }
@@ -247,6 +273,15 @@ export default function App() {
           email: user.email!,
           name: profile.full_name,
           balance: profile.balance
+        });
+        setIsLoggedIn(true);
+      } else {
+        // Fallback if profile creation fails but user is authenticated
+        setCurrentUser({
+          userId: `TUBD-TEMP`,
+          email: user.email!,
+          name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          balance: 0
         });
         setIsLoggedIn(true);
       }
@@ -693,116 +728,191 @@ export default function App() {
   }
 
   if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
-        </div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-500/10 border border-slate-100 overflow-hidden relative z-10"
-        >
-          <div className="p-8 pb-4 text-center">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-200 rotate-3">
-              <TrendingUp className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Top Up BD</h1>
-            <p className="text-slate-500 mt-2 font-medium">
-              {authMode === 'login' ? 'Welcome back! Please login.' : 'Create an account to get started.'}
-            </p>
+    if (authMode === 'login') {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 font-sans">
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
+            <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
           </div>
 
-          <div className="p-8 pt-4">
-            <form onSubmit={handleAuth} className="space-y-4">
-              <AnimatePresence mode="wait">
-                {authMode === 'signup' && (
-                  <motion.div
-                    key="name"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="space-y-2"
-                  >
-                    <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
-                    <div className="relative">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                      <input 
-                        type="text"
-                        required
-                        placeholder="John Doe"
-                        value={authName}
-                        onChange={(e) => setAuthName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input 
-                    type="email"
-                    required
-                    placeholder="name@example.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                  />
-                </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-500/10 border border-slate-100 overflow-hidden relative z-10"
+          >
+            <div className="p-8 pb-4 text-center">
+              <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-200 rotate-3">
+                <TrendingUp className="w-8 h-8 text-white" />
               </div>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Welcome Back</h1>
+              <p className="text-slate-500 mt-2 font-medium">Please login to your account.</p>
+            </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input 
-                    type={showPassword ? "text" : "password"}
-                    required
-                    placeholder="••••••••"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
+            <div className="p-8 pt-4">
+              <form onSubmit={handleAuth} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                      type="email"
+                      required
+                      placeholder="name@example.com"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <button 
-                type="submit"
-                className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2"
-              >
-                {authMode === 'login' ? <LogOut className="w-5 h-5 rotate-180" /> : <UserPlus className="w-5 h-5" />}
-                {authMode === 'login' ? 'Login Now' : 'Create Account'}
-              </button>
-            </form>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                      type={showPassword ? "text" : "password"}
+                      required
+                      placeholder="••••••••"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
 
-            <div className="mt-8 text-center">
-              <p className="text-slate-500 text-sm font-medium">
-                {authMode === 'login' ? "Don't have an account?" : "Already have an account?"}
                 <button 
-                  onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-                  className="ml-2 text-indigo-600 font-bold hover:underline"
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
                 >
-                  {authMode === 'login' ? 'Sign Up' : 'Login'}
+                  {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5 rotate-180" />}
+                  {isLoading ? 'Logging in...' : 'Login Now'}
                 </button>
-              </p>
+              </form>
+
+              <div className="mt-8 text-center">
+                <p className="text-slate-500 text-sm font-medium">
+                  Don't have an account?
+                  <button 
+                    onClick={() => setAuthMode('signup')}
+                    className="ml-2 text-indigo-600 font-bold hover:underline"
+                  >
+                    Create Account
+                  </button>
+                </p>
+              </div>
             </div>
+          </motion.div>
+        </div>
+      );
+    } else {
+      return (
+        <div className="min-h-screen bg-indigo-50 flex items-center justify-center p-4 font-sans">
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-0 left-0 w-full h-96 bg-indigo-600 rounded-b-[4rem] shadow-2xl" />
           </div>
-        </motion.div>
-      </div>
-    );
+
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-900/20 border border-slate-100 overflow-hidden relative z-10"
+          >
+            <div className="p-8 pb-4 text-center">
+              <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+                <UserPlus className="w-8 h-8 text-indigo-600" />
+              </div>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tight">Join Top Up BD</h1>
+              <p className="text-slate-500 mt-2 font-medium">Create an account to get started.</p>
+            </div>
+
+            <div className="p-8 pt-4">
+              <form onSubmit={handleAuth} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                      type="text"
+                      required
+                      placeholder="John Doe"
+                      value={authName}
+                      onChange={(e) => setAuthName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                      type="email"
+                      required
+                      placeholder="name@example.com"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input 
+                      type={showPassword ? "text" : "password"}
+                      required
+                      placeholder="••••••••"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
+                  {isLoading ? 'Creating Account...' : 'Create Account'}
+                </button>
+              </form>
+
+              <div className="mt-8 text-center">
+                <p className="text-slate-500 text-sm font-medium">
+                  Already have an account?
+                  <button 
+                    onClick={() => setAuthMode('login')}
+                    className="ml-2 text-indigo-600 font-bold hover:underline"
+                  >
+                    Login Here
+                  </button>
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      );
+    }
   }
 
   return (

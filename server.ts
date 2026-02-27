@@ -11,7 +11,7 @@ async function startServer() {
   app.use(express.json());
 
   const API_URL = "https://motherpanel.com/api/v2";
-  const API_KEY = process.env.MOTHER_PANEL_API_KEY || "b450685571faedf9900cf3c36993c48f";
+  const API_KEY = process.env.MOTHER_PANEL_API_KEY || "b0ef21942953387ad901b31cd523fdb8";
 
   // Proxy for Top Up BD API
   app.post("/api/proxy", async (req, res) => {
