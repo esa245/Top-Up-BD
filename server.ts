@@ -28,11 +28,20 @@ async function startServer() {
 
       const response = await fetch(API_URL, {
         method: "POST",
-        body: body,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body.toString(),
       });
 
-      const data = await response.json();
-      res.json(data);
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
+        res.json(data);
+      } catch (e) {
+        console.error("Failed to parse MotherPanel response:", text);
+        res.status(500).json({ error: "Invalid response from provider API" });
+      }
     } catch (error) {
       console.error("API Proxy Error:", error);
       res.status(500).json({ error: "Internal Server Error" });

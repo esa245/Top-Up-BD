@@ -111,6 +111,7 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const [view, setView] = useState<'user' | 'admin'>('user');
   const [adminTab, setAdminTab] = useState<'orders' | 'users'>('orders');
@@ -292,40 +293,8 @@ export default function App() {
       if (session?.user) {
         await fetchAndSetProfile(session.user);
       } else {
-        // Auto-login logic
-        let localEmail = localStorage.getItem('tubd_email');
-        let localPass = localStorage.getItem('tubd_pass');
-        
-        if (!localEmail || !localPass) {
-          localEmail = `guest_${Date.now()}@topupbd.com`;
-          localPass = `pass_${Math.random().toString(36).slice(-8)}`;
-          localStorage.setItem('tubd_email', localEmail);
-          localStorage.setItem('tubd_pass', localPass);
-          
-          const { data, error } = await supabase.auth.signUp({ 
-            email: localEmail, 
-            password: localPass,
-            options: { data: { full_name: 'Guest User' } }
-          });
-          
-          if (data.user) {
-            await fetchAndSetProfile(data.user);
-          }
-        } else {
-          const { data, error } = await supabase.auth.signInWithPassword({ 
-            email: localEmail, 
-            password: localPass 
-          });
-          if (data.user) {
-            await fetchAndSetProfile(data.user);
-          } else {
-            // If login fails, clear and retry
-            localStorage.removeItem('tubd_email');
-            localStorage.removeItem('tubd_pass');
-            checkUser();
-            return;
-          }
-        }
+        setIsLoggedIn(false);
+        setCurrentUser(null);
       }
       
       // Fetch all users for admin
@@ -349,6 +318,10 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         await fetchAndSetProfile(session.user);
+        setShowAuthModal(false);
+      } else {
+        setIsLoggedIn(false);
+        setCurrentUser(null);
       }
     });
 
@@ -411,6 +384,14 @@ export default function App() {
     setCurrentUser(null);
   };
 
+  const handleTabChange = (tab: any) => {
+    if (!isLoggedIn && (tab === 'add-funds' || tab === 'account' || tab === 'orders')) {
+      setShowAuthModal(true);
+      return;
+    }
+    setActiveTab(tab);
+  };
+
   useEffect(() => {
     if (selectedService && quantity) {
       const qty = parseInt(quantity) || 0;
@@ -436,6 +417,10 @@ export default function App() {
 
   const handleSubmitOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoggedIn) {
+      setShowAuthModal(true);
+      return;
+    }
     if (!link || !quantity || !selectedService || parseInt(quantity) < selectedService.min) return;
     setStep('payment');
   };
@@ -791,16 +776,27 @@ export default function App() {
             <h1 className="text-xl font-bold tracking-tight">Top Up BD</h1>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Balance</span>
-              <span className="text-sm font-bold text-emerald-600">৳ {parseFloat(balance).toFixed(2)}</span>
-            </div>
-            <div 
-              onClick={() => setActiveTab('account')}
-              className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-200 transition-colors overflow-hidden"
-            >
-              <img src="https://picsum.photos/seed/user/100/100" alt="User" referrerPolicy="no-referrer" />
-            </div>
+            {!isLoggedIn ? (
+              <button 
+                onClick={() => setShowAuthModal(true)}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-sm hover:bg-indigo-700 transition-colors"
+              >
+                Login
+              </button>
+            ) : (
+              <>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Balance</span>
+                  <span className="text-sm font-bold text-emerald-600">৳ {parseFloat(balance).toFixed(2)}</span>
+                </div>
+                <div 
+                  onClick={() => handleTabChange('account')}
+                  className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-200 transition-colors overflow-hidden"
+                >
+                  <img src="https://picsum.photos/seed/user/100/100" alt="User" referrerPolicy="no-referrer" />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -1410,34 +1406,219 @@ export default function App() {
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-around z-10">
         <button 
-          onClick={() => setActiveTab('new-order')}
+          onClick={() => handleTabChange('new-order')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'new-order' ? 'text-indigo-600' : 'text-slate-400'}`}
         >
           <TrendingUp className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-wider">New Order</span>
         </button>
         <button 
-          onClick={() => setActiveTab('orders')}
+          onClick={() => handleTabChange('orders')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'orders' ? 'text-indigo-600' : 'text-slate-400'}`}
         >
           <History className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-wider">Orders</span>
         </button>
         <button 
-          onClick={() => setActiveTab('add-funds')}
+          onClick={() => handleTabChange('add-funds')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'add-funds' ? 'text-indigo-600' : 'text-slate-400'}`}
         >
           <Wallet className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-wider">Add Funds</span>
         </button>
         <button 
-          onClick={() => setActiveTab('support')}
+          onClick={() => handleTabChange('support')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'support' ? 'text-indigo-600' : 'text-slate-400'}`}
         >
           <Headphones className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-wider">Support</span>
         </button>
       </nav>
+
+      {/* Auth Modal */}
+      <AnimatePresence>
+        {showAuthModal && !isLoggedIn && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden relative"
+            >
+              <button 
+                onClick={() => setShowAuthModal(false)}
+                className="absolute top-6 right-6 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {authMode === 'login' ? (
+                <div className="p-8">
+                  <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-200 rotate-3">
+                      <TrendingUp className="w-8 h-8 text-white" />
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Welcome Back</h2>
+                    <p className="text-slate-500 mt-2 font-medium">Please login to continue.</p>
+                  </div>
+
+                  <form onSubmit={handleAuth} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input 
+                          type="email"
+                          required
+                          placeholder="name@example.com"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input 
+                          type={showPassword ? "text" : "password"}
+                          required
+                          placeholder="••••••••"
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
+                    >
+                      {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5 rotate-180" />}
+                      {isLoading ? 'Logging in...' : 'Login Now'}
+                    </button>
+                  </form>
+
+                  <div className="mt-8 text-center">
+                    <p className="text-slate-500 text-sm font-medium">
+                      Don't have an account?
+                      <button 
+                        type="button"
+                        onClick={() => setAuthMode('signup')}
+                        className="ml-2 text-indigo-600 font-bold hover:underline"
+                      >
+                        Create Account
+                      </button>
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-8">
+                  <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+                      <UserPlus className="w-8 h-8 text-indigo-600" />
+                    </div>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Join Top Up BD</h2>
+                    <p className="text-slate-500 mt-2 font-medium">Create an account to get started.</p>
+                  </div>
+
+                  <form onSubmit={handleAuth} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
+                      <div className="relative">
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text"
+                          required
+                          placeholder="John Doe"
+                          value={authName}
+                          onChange={(e) => setAuthName(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input 
+                          type="email"
+                          required
+                          placeholder="name@example.com"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input 
+                          type={showPassword ? "text" : "password"}
+                          required
+                          placeholder="••••••••"
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        />
+                        <button 
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        >
+                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button 
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2 disabled:opacity-70"
+                    >
+                      {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
+                      {isLoading ? 'Creating Account...' : 'Create Account'}
+                    </button>
+                  </form>
+
+                  <div className="mt-8 text-center">
+                    <p className="text-slate-500 text-sm font-medium">
+                      Already have an account?
+                      <button 
+                        type="button"
+                        onClick={() => setAuthMode('login')}
+                        className="ml-2 text-indigo-600 font-bold hover:underline"
+                      >
+                        Login Here
+                      </button>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
