@@ -40,8 +40,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase Client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://deqbjwcgpjnlkafucbxr.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlcWJqd2NncGpubGthZnVjYnhyIiwicm9sZSI6ImRlcWJqd2NncGpubGthZnVjYnhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjUwMTMsImV4cCI6MjA4NzcwMTAxM30.zNQpwRS3vTkLuvURxWELB4bHynrP7OajfG69QO6B1ZMZM';
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || 'https://deqbjwcgpjnlkafucbxr.supabase.co';
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlcWJqd2NncGpubGthZnVjYnhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjUwMTMsImV4cCI6MjA4NzcwMTAxM30.zNQpwRS3vTkLuvURxWELB4bHynrP7OajfG69QO6B1ZMZM';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Types
@@ -215,24 +215,47 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const fetchAndSetProfile = async (user: any) => {
+      let { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile) {
+        const randomId = Math.floor(1000 + Math.random() * 9000);
+        const { data: newProfile, error } = await supabase
+          .from('profiles')
+          .insert([{ 
+            id: user.id,
+            user_id: `TUBD-${randomId}`,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            email: user.email,
+            balance: 0
+          }])
+          .select()
+          .single();
+        
+        if (!error && newProfile) {
+          profile = newProfile;
+        }
+      }
+
+      if (profile) {
+        setCurrentUser({
+          userId: profile.user_id,
+          email: user.email!,
+          name: profile.full_name,
+          balance: profile.balance
+        });
+        setIsLoggedIn(true);
+      }
+    };
+
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile) {
-          setCurrentUser({
-            userId: profile.user_id,
-            email: session.user.email!,
-            name: profile.full_name,
-            balance: profile.balance
-          });
-          setIsLoggedIn(true);
-        }
+        await fetchAndSetProfile(session.user);
       }
       
       // Fetch all users for admin
@@ -255,21 +278,7 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile) {
-          setCurrentUser({
-            userId: profile.user_id,
-            email: session.user.email!,
-            name: profile.full_name,
-            balance: profile.balance
-          });
-          setIsLoggedIn(true);
-        }
+        await fetchAndSetProfile(session.user);
       } else {
         setIsLoggedIn(false);
         setCurrentUser(null);
@@ -287,26 +296,21 @@ export default function App() {
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: authEmail,
           password: authPassword,
+          options: {
+            data: {
+              full_name: authName,
+            }
+          }
         });
 
         if (authError) throw authError;
 
         if (authData.user) {
-          const randomId = Math.floor(1000 + Math.random() * 9000);
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert([
-              { 
-                id: authData.user.id,
-                user_id: `TUBD-${randomId}`,
-                full_name: authName,
-                email: authEmail,
-                balance: 0
-              }
-            ]);
-          
-          if (profileError) throw profileError;
-          alert("Account created! Please check your email for verification.");
+          if (authData.session) {
+            alert("Account created successfully!");
+          } else {
+            alert("Account created! Please check your email for verification link.");
+          }
         }
       } else {
         const { error: loginError } = await supabase.auth.signInWithPassword({
