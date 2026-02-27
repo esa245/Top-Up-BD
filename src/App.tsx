@@ -143,10 +143,10 @@ export default function App() {
 
   // Auth Effects
   useEffect(() => {
-    // Global fail-safe: Force loading screen to disappear after 3 seconds no matter what
+    // Global fail-safe: Force loading screen to disappear almost instantly (0.8s)
     const globalTimeout = setTimeout(() => {
       setIsInitialAuthLoading(false);
-    }, 3000);
+    }, 800);
 
     const fetchAndSetProfile = async (user: any) => {
       try {
@@ -200,13 +200,10 @@ export default function App() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          // Start fetching profile but don't block the initial loading screen if it's slow
-          fetchAndSetProfile(session.user).finally(() => {
-            setIsInitialAuthLoading(false);
-          });
-          
-          // Safety fallback: if profile takes > 1.5s, show the app anyway
-          setTimeout(() => setIsInitialAuthLoading(false), 1500);
+          // Immediately show the app if session exists
+          setIsInitialAuthLoading(false);
+          // Fetch profile in background
+          fetchAndSetProfile(session.user);
         } else {
           setIsInitialAuthLoading(false);
         }
@@ -223,6 +220,7 @@ export default function App() {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           await fetchAndSetProfile(session.user);
           setShowAuthModal(false);
+          setIsInitialAuthLoading(false);
         }
       } else if (event === 'SIGNED_OUT') {
         setIsLoggedIn(false);
