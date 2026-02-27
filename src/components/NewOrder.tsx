@@ -15,6 +15,7 @@ interface NewOrderProps {
   transactionId: string;
   isVerifying: boolean;
   step: 'form' | 'payment';
+  userBalance: number;
   onCategoryChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   onServiceChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   onLinkChange: (val: string) => void;
@@ -37,6 +38,7 @@ export const NewOrder: React.FC<NewOrderProps> = ({
   transactionId,
   isVerifying,
   step,
+  userBalance,
   onCategoryChange,
   onServiceChange,
   onLinkChange,
@@ -66,6 +68,8 @@ export const NewOrder: React.FC<NewOrderProps> = ({
       </div>
     );
   }
+
+  const hasEnoughBalance = userBalance >= charge;
 
   return (
     <AnimatePresence mode="wait">
@@ -208,84 +212,129 @@ export const NewOrder: React.FC<NewOrderProps> = ({
           </button>
 
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xl">
-            {/* Nagad Header */}
-            <div className="bg-slate-50 p-6 flex flex-col items-center border-b border-slate-100">
-              <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 p-2">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Nagad_Logo.svg/1200px-Nagad_Logo.svg.png" alt="Nagad" className="w-full object-contain" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-800">Top Up BD Payment</h2>
-              <div className="mt-4 text-3xl font-black text-indigo-600">
-                ৳ {charge.toFixed(2)} BDT
-              </div>
-            </div>
-
-            {/* Instructions */}
-            <div className="p-6 space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</div>
-                  <p className="text-sm text-slate-600 leading-relaxed">আপনার <span className="font-bold text-slate-900">Nagad</span> মোবাইল অ্যাপে যান।</p>
+            {hasEnoughBalance ? (
+              <div className="p-8 text-center space-y-6">
+                <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto">
+                  <Zap className="w-10 h-10 text-emerald-600" />
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</div>
-                  <p className="text-sm text-slate-600 leading-relaxed"><span className="font-bold text-slate-900">Send Money</span> -এ ক্লিক করুন।</p>
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">Confirm Order</h2>
+                  <p className="text-slate-500 mt-2">You have sufficient balance to place this order.</p>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</div>
-                  <div className="flex-1 space-y-2">
-                    <p className="text-sm text-slate-600">প্রাপক নম্বর হিসেবে এই নম্বরটি লিখুনঃ</p>
-                    <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
-                      <span className="font-mono font-bold text-slate-900">{paymentNumbers.nagad}</span>
-                      <button 
-                        onClick={() => onCopy(paymentNumbers.nagad)}
-                        className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
-                      >
-                        <Copy className="w-3 h-3" /> কপি করুন
-                      </button>
-                    </div>
+                
+                <div className="bg-slate-50 rounded-2xl p-6 space-y-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Order Charge:</span>
+                    <span className="font-bold text-slate-900">৳{charge.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Current Balance:</span>
+                    <span className="font-bold text-emerald-600">৳{userBalance.toFixed(2)}</span>
+                  </div>
+                  <div className="pt-4 border-t border-slate-200 flex justify-between text-lg">
+                    <span className="font-bold text-slate-900">Remaining:</span>
+                    <span className="font-black text-indigo-600">৳{(userBalance - charge).toFixed(2)}</span>
                   </div>
                 </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</div>
-                  <div className="flex-1 space-y-2">
-                    <p className="text-sm text-slate-600">টাকার পরিমাণঃ <span className="font-bold text-slate-900">{charge.toFixed(2)} BDT</span></p>
-                    <button 
-                      onClick={() => onCopy(charge.toFixed(2))}
-                      className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
-                    >
-                      <Copy className="w-3 h-3" /> কপি করুন
-                    </button>
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-4 pt-4 border-t border-slate-100">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-700">Transaction ID</label>
-                  <input 
-                    type="text"
-                    placeholder="8N7X6W5V4U"
-                    value={transactionId}
-                    onChange={(e) => onTransactionIdChange(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono font-bold"
-                  />
-                </div>
                 <button 
                   onClick={onVerify}
-                  disabled={!transactionId || isVerifying}
-                  className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+                  disabled={isVerifying}
+                  className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                 >
                   {isVerifying ? (
                     <>
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Verifying...
+                      Processing...
                     </>
                   ) : (
-                    'Verify Payment'
+                    'Confirm & Pay'
                   )}
                 </button>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Nagad Header */}
+                <div className="bg-slate-50 p-6 flex flex-col items-center border-b border-slate-100">
+                  <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4 p-2">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Nagad_Logo.svg/1200px-Nagad_Logo.svg.png" alt="Nagad" className="w-full object-contain" />
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-800">Top Up BD Payment</h2>
+                  <div className="mt-4 text-3xl font-black text-indigo-600">
+                    ৳ {charge.toFixed(2)} BDT
+                  </div>
+                  <p className="text-xs text-rose-500 font-bold mt-2">Insufficient Balance! Please pay manually.</p>
+                </div>
+
+                {/* Instructions */}
+                <div className="p-6 space-y-6">
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-4">
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</div>
+                      <p className="text-sm text-slate-600 leading-relaxed">আপনার <span className="font-bold text-slate-900">Nagad</span> মোবাইল অ্যাপে যান।</p>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</div>
+                      <p className="text-sm text-slate-600 leading-relaxed"><span className="font-bold text-slate-900">Send Money</span> -এ ক্লিক করুন।</p>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</div>
+                      <div className="flex-1 space-y-2">
+                        <p className="text-sm text-slate-600">প্রাপক নম্বর হিসেবে এই নম্বরটি লিখুনঃ</p>
+                        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
+                          <span className="font-mono font-bold text-slate-900">{paymentNumbers.nagad}</span>
+                          <button 
+                            onClick={() => onCopy(paymentNumbers.nagad)}
+                            className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
+                          >
+                            <Copy className="w-3 h-3" /> কপি করুন
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</div>
+                      <div className="flex-1 space-y-2">
+                        <p className="text-sm text-slate-600">টাকার পরিমাণঃ <span className="font-bold text-slate-900">{charge.toFixed(2)} BDT</span></p>
+                        <button 
+                          onClick={() => onCopy(charge.toFixed(2))}
+                          className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg hover:bg-indigo-100 transition-colors"
+                        >
+                          <Copy className="w-3 h-3" /> কপি করুন
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold text-slate-700">Transaction ID</label>
+                      <input 
+                        type="text"
+                        placeholder="8N7X6W5V4U"
+                        value={transactionId}
+                        onChange={(e) => onTransactionIdChange(e.target.value.toUpperCase())}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono font-bold"
+                      />
+                    </div>
+                    <button 
+                      onClick={onVerify}
+                      disabled={!transactionId || isVerifying}
+                      className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+                    >
+                      {isVerifying ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        'Verify Payment'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </motion.div>
       )}

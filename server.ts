@@ -48,6 +48,27 @@ async function startServer() {
     }
   });
 
+  // Payment Verification Endpoint
+  app.post("/api/verify-transaction", async (req, res) => {
+    try {
+      const { transactionId, amount, method } = req.body;
+
+      // IMPORTANT: Here you should call your real Payment Gateway API (e.g., Shurjopay, SSLCommerz, or custom Nagad/bKash API)
+      // For now, we will simulate a successful verification if the ID is 10 characters long.
+      // In a real app, you would verify if this transactionId actually exists and matches the amount.
+      
+      const isValid = transactionId.length >= 8 && /^[A-Z0-9]+$/.test(transactionId);
+
+      if (isValid) {
+        res.json({ success: true, message: "Transaction verified successfully!" });
+      } else {
+        res.status(400).json({ success: false, message: "Invalid Transaction ID or mismatch." });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Verification failed." });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

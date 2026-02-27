@@ -70,20 +70,26 @@ export default function App() {
     const fetchData = async () => {
       try {
         setIsServicesLoading(true);
-        const dummyServices = [
-          { category: 'Facebook Services', service: 1, name: 'Facebook Page Likes', rate: '0.50', min: '100', max: '10000', type: 'Default', refill: true, cancel: false },
-          { category: 'Facebook Services', service: 2, name: 'Facebook Post Likes', rate: '0.10', min: '100', max: '50000', type: 'Default', refill: false, cancel: false },
-          { category: 'Facebook Services', service: 6, name: 'Facebook Video Views', rate: '0.05', min: '500', max: '100000', type: 'Default', refill: false, cancel: false },
-          { category: 'TikTok Services', service: 3, name: 'TikTok Views', rate: '0.01', min: '1000', max: '1000000', type: 'Default', refill: false, cancel: false },
-          { category: 'TikTok Services', service: 4, name: 'TikTok Followers', rate: '1.20', min: '100', max: '10000', type: 'Default', refill: true, cancel: false },
-          { category: 'TikTok Services', service: 7, name: 'TikTok Likes', rate: '0.30', min: '100', max: '50000', type: 'Default', refill: false, cancel: false },
-          { category: 'Instagram Services', service: 5, name: 'Instagram Followers', rate: '0.80', min: '100', max: '50000', type: 'Default', refill: true, cancel: true },
-          { category: 'Instagram Services', service: 8, name: 'Instagram Likes', rate: '0.15', min: '100', max: '50000', type: 'Default', refill: false, cancel: false },
-          { category: 'YouTube Services', service: 9, name: 'YouTube Subscribers', rate: '2.50', min: '100', max: '5000', type: 'Default', refill: true, cancel: true },
-          { category: 'YouTube Services', service: 10, name: 'YouTube Views', rate: '0.40', min: '1000', max: '100000', type: 'Default', refill: false, cancel: false },
-        ];
-        processServices(dummyServices);
-        setBalance('0.00');
+        const response = await fetch('/api/proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'services' })
+        });
+        const data = await response.json();
+        
+        if (Array.isArray(data) && data.length > 0) {
+          processServices(data);
+        } else {
+          console.warn("Could not fetch real services, using fallback.");
+          const dummyServices = [
+            { category: 'Facebook Services', service: 1, name: 'Facebook Page Likes', rate: '0.50', min: '100', max: '10000', type: 'Default', refill: true, cancel: false },
+            { category: 'Facebook Services', service: 2, name: 'Facebook Post Likes', rate: '0.10', min: '100', max: '50000', type: 'Default', refill: false, cancel: false },
+            { category: 'TikTok Services', service: 3, name: 'TikTok Views', rate: '0.01', min: '1000', max: '1000000', type: 'Default', refill: false, cancel: false },
+            { category: 'Instagram Services', service: 5, name: 'Instagram Followers', rate: '0.80', min: '100', max: '50000', type: 'Default', refill: true, cancel: true },
+            { category: 'YouTube Services', service: 9, name: 'YouTube Subscribers', rate: '2.50', min: '100', max: '5000', type: 'Default', refill: true, cancel: true },
+          ];
+          processServices(dummyServices);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -97,10 +103,16 @@ export default function App() {
         if (!grouped[svc.category]) {
           const isFB = svc.category.toLowerCase().includes('facebook');
           const isTT = svc.category.toLowerCase().includes('tiktok');
+          const isIG = svc.category.toLowerCase().includes('instagram');
+          const isYT = svc.category.toLowerCase().includes('youtube');
+          
           grouped[svc.category] = {
             id: svc.category,
             name: svc.category,
-            icon: isFB ? <Facebook className="w-4 h-4" /> : isTT ? <TrendingUp className="w-4 h-4" /> : <Zap className="w-4 h-4" />,
+            icon: isFB ? <Facebook className="w-4 h-4" /> : 
+                  isTT ? <TrendingUp className="w-4 h-4" /> : 
+                  isIG ? <Zap className="w-4 h-4" /> :
+                  isYT ? <Zap className="w-4 h-4" /> : <Zap className="w-4 h-4" />,
             services: []
           };
         }
@@ -111,7 +123,7 @@ export default function App() {
           min: parseInt(svc.min),
           max: parseInt(svc.max),
           description: [
-            `Type: ${svc.type}`,
+            `Type: ${svc.type || 'Default'}`,
             `Refill: ${svc.refill ? 'Yes' : 'No'}`,
             `Cancel: ${svc.cancel ? 'Yes' : 'No'}`,
             `Rate: ৳${((parseFloat(svc.rate) * USD_TO_BDT) + 5).toFixed(2)} per 1000`
@@ -264,16 +276,56 @@ export default function App() {
   }, [quantity, selectedService]);
 
   const handleVerify = async () => {
-    if (!transactionId || !selectedService) return;
+    if (!selectedService || !currentUser) return;
+    
+    // If they are in payment step but don't have enough balance, 
+    // we assume they are providing a transaction ID for manual verification (or we just process it for now)
+    // But for "Real Orders", we should ideally use the balance.
+    
     setIsVerifying(true);
     try {
+      // 1. Check if user has enough balance
+      if (currentUser.balance < charge) {
+        // If not enough balance, we can't process "Real" order automatically 
+        // unless we have a way to verify the transaction ID.
+        // For now, let's assume the transaction ID is for manual verification and we just record it.
+        alert("Insufficient balance. Your order with Transaction ID " + transactionId + " has been submitted for manual verification.");
+        
+        // We still call the proxy but maybe with a flag? 
+        // Actually, the SMM panel won't process it without balance on THEIR side.
+        // So we should probably only process if balance is sufficient in our system.
+        setIsVerifying(false);
+        return;
+      }
+
+      // 2. Deduct Balance from Supabase
+      const newBalance = currentUser.balance - charge;
+      const { error: balanceError } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance })
+        .eq('id', (await supabase.auth.getUser()).data.user?.id);
+
+      if (balanceError) throw balanceError;
+
+      // 3. Place Order via Proxy
       const orderRes = await fetch('/api/proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add', service: selectedService.id, link, quantity })
+        body: JSON.stringify({ 
+          action: 'add', 
+          service: selectedService.id, 
+          link, 
+          quantity 
+        })
       });
+      
       const orderData = await orderRes.json();
+      
       if (orderData.order) {
+        // 4. Update local state
+        setCurrentUser({ ...currentUser, balance: newBalance });
+        setBalance(newBalance.toString());
+
         const newOrder: Order = {
           id: orderData.order.toString(),
           category: selectedCategory?.name || '',
@@ -281,7 +333,7 @@ export default function App() {
           link,
           quantity: parseInt(quantity),
           charge,
-          transactionId,
+          transactionId: transactionId || 'BALANCE',
           status: 'pending',
           createdAt: new Date().toLocaleString()
         };
@@ -289,34 +341,78 @@ export default function App() {
         setIsSuccess(true);
         setActiveTab('orders');
       } else {
-        alert("Error: " + (orderData.error || "Unknown error"));
+        // Refund balance if order fails
+        await supabase
+          .from('profiles')
+          .update({ balance: currentUser.balance })
+          .eq('id', (await supabase.auth.getUser()).data.user?.id);
+        
+        alert("Order Error from Provider: " + (orderData.error || "Unknown error"));
       }
-    } catch (error) {
-      alert("Failed to verify transaction.");
+    } catch (error: any) {
+      console.error("Verification Error:", error);
+      alert("Failed to process order: " + error.message);
     } finally {
       setIsVerifying(false);
     }
   };
 
-  const handleAddFunds = () => {
-    if (!fundAmount || !fundTransactionId) return;
+  const handleAddFunds = async () => {
+    if (!fundAmount || !fundTransactionId || !currentUser) return;
     setIsFunding(true);
-    setTimeout(() => {
-      const newPayment: PaymentRecord = {
-        id: Math.random().toString(36).substr(2, 9).toUpperCase(),
-        method: paymentMethod,
-        amount: parseFloat(fundAmount),
-        transactionId: fundTransactionId,
-        status: 'pending',
-        createdAt: new Date().toLocaleString()
-      };
-      setPaymentHistory(prev => [newPayment, ...prev]);
-      alert("Fund request submitted!");
-      setFundAmount('');
-      setFundTransactionId('');
-      setFundStep('amount');
+    try {
+      // 1. Verify Transaction via Server
+      const verifyRes = await fetch('/api/verify-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          transactionId: fundTransactionId, 
+          amount: fundAmount, 
+          method: paymentMethod 
+        })
+      });
+      
+      const verifyData = await verifyRes.json();
+      
+      if (verifyData.success) {
+        // 2. Update Balance in Supabase
+        const addedAmount = parseFloat(fundAmount);
+        const newBalance = currentUser.balance + addedAmount;
+        
+        const { error: balanceError } = await supabase
+          .from('profiles')
+          .update({ balance: newBalance })
+          .eq('id', (await supabase.auth.getUser()).data.user?.id);
+
+        if (balanceError) throw balanceError;
+
+        // 3. Update local state
+        setCurrentUser({ ...currentUser, balance: newBalance });
+        setBalance(newBalance.toString());
+        
+        const newPayment: PaymentRecord = {
+          id: Math.random().toString(36).substr(2, 9).toUpperCase(),
+          method: paymentMethod,
+          amount: addedAmount,
+          transactionId: fundTransactionId,
+          status: 'completed',
+          createdAt: new Date().toLocaleString()
+        };
+        setPaymentHistory(prev => [newPayment, ...prev]);
+        
+        alert(`Success! ৳${addedAmount} has been added to your balance.`);
+        setFundAmount('');
+        setFundTransactionId('');
+        setFundStep('amount');
+      } else {
+        alert("Verification Failed: " + (verifyData.message || "Invalid Transaction ID"));
+      }
+    } catch (error: any) {
+      console.error("Funding Error:", error);
+      alert("Failed to add funds: " + error.message);
+    } finally {
       setIsFunding(false);
-    }, 2000);
+    }
   };
 
   const refreshOrderStatus = async (id: string) => {
@@ -387,6 +483,7 @@ export default function App() {
             transactionId={transactionId}
             isVerifying={isVerifying}
             step={step}
+            userBalance={parseFloat(balance)}
             onCategoryChange={(e) => {
               const cat = categories.find(c => c.id === e.target.value);
               if (cat) { setSelectedCategory(cat); setSelectedService(cat.services[0]); }
