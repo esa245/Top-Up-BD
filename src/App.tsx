@@ -143,6 +143,11 @@ export default function App() {
 
   // Auth Effects
   useEffect(() => {
+    // Global fail-safe: Force loading screen to disappear after 3 seconds no matter what
+    const globalTimeout = setTimeout(() => {
+      setIsInitialAuthLoading(false);
+    }, 3000);
+
     const fetchAndSetProfile = async (user: any) => {
       try {
         let { data: profile, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
@@ -200,8 +205,8 @@ export default function App() {
             setIsInitialAuthLoading(false);
           });
           
-          // Safety fallback: if profile takes > 2s, show the app anyway
-          setTimeout(() => setIsInitialAuthLoading(false), 2000);
+          // Safety fallback: if profile takes > 1.5s, show the app anyway
+          setTimeout(() => setIsInitialAuthLoading(false), 1500);
         } else {
           setIsInitialAuthLoading(false);
         }
@@ -244,6 +249,7 @@ export default function App() {
     window.addEventListener('google-login', handleGoogleLoginEvent);
 
     return () => {
+      clearTimeout(globalTimeout);
       subscription.unsubscribe();
       window.removeEventListener('google-login', handleGoogleLoginEvent);
     };
