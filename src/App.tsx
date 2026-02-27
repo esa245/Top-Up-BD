@@ -309,7 +309,18 @@ export default function App() {
           if (authData.session) {
             alert("Account created successfully!");
           } else {
-            alert("Account created! Please check your email for verification link.");
+            // Even if session is null initially, if email confirmation is off, 
+            // we can try to sign in immediately to get the session
+            const { error: loginError } = await supabase.auth.signInWithPassword({
+              email: authEmail,
+              password: authPassword,
+            });
+            
+            if (loginError) {
+              alert("Account created! Please check your email for verification link.");
+            } else {
+              alert("Account created successfully!");
+            }
           }
         }
       } else {
