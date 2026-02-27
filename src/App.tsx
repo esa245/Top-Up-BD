@@ -51,8 +51,9 @@ export default function App() {
   const [transactionId, setTransactionId] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isServicesLoading, setIsServicesLoading] = useState(true);
+  const [isInitialAuthLoading, setIsInitialAuthLoading] = useState(true);
   const [balance, setBalance] = useState<string>('0.00');
-  const [isLoading, setIsLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<'nagad' | 'bkash'>('nagad');
   const [fundAmount, setFundAmount] = useState('');
   const [fundTransactionId, setFundTransactionId] = useState('');
@@ -61,11 +62,14 @@ export default function App() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
 
+  // Combined Loading State
+  const isLoading = isServicesLoading || isInitialAuthLoading;
+
   // Fetch Services
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsLoading(true);
+        setIsServicesLoading(true);
         const dummyServices = [
           { category: 'Facebook Services', service: 1, name: 'Facebook Page Likes', rate: '0.50', min: '100', max: '10000', type: 'Default', refill: true, cancel: false },
           { category: 'Facebook Services', service: 2, name: 'Facebook Post Likes', rate: '0.10', min: '100', max: '50000', type: 'Default', refill: false, cancel: false },
@@ -83,7 +87,7 @@ export default function App() {
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
-        setIsLoading(false);
+        setIsServicesLoading(false);
       }
     };
 
@@ -129,45 +133,78 @@ export default function App() {
   // Auth Effects
   useEffect(() => {
     const fetchAndSetProfile = async (user: any) => {
-      let { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      if (!profile) {
-        const randomId = Math.floor(1000 + Math.random() * 9000);
-        const { data: newProfile } = await supabase.from('profiles').insert([{ 
-          id: user.id,
-          user_id: `TUBD-${randomId}`,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-          email: user.email,
-          balance: 0
-        }]).select().single();
-        if (newProfile) profile = newProfile;
-      }
+      try {
+        let { data: profile, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        
+        if (error && error.code !== 'PGRST116') {
+          console.error("Error fetching profile:", error);
+        }
 
-      if (profile) {
-        setCurrentUser({
-          userId: profile.user_id,
-          email: user.email!,
-          name: profile.full_name,
-          balance: profile.balance
-        });
+        if (!profile) {
+          const randomId = Math.floor(1000 + Math.random() * 9000);
+          const { data: newProfile, error: insertError } = await supabase.from('profiles').insert([{ 
+            id: user.id,
+            user_id: `TUBD-${randomId}`,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            email: user.email,
+            balance: 0
+          }]).select().single();
+          
+          if (insertError) {
+            console.error("Error creating profile:", insertError);
+          } else {
+            profile = newProfile;
+          }
+        }
+
+        if (profile) {
+          setCurrentUser({
+            userId: profile.user_id,
+            email: user.email!,
+            name: profile.full_name,
+            balance: profile.balance
+          });
+          setBalance(profile.balance.toString());
+        } else {
+          // Fallback if profile still not available
+          setCurrentUser({
+            userId: 'TUBD-TEMP',
+            email: user.email!,
+            name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            balance: 0
+          });
+        }
         setIsLoggedIn(true);
+      } catch (err) {
+        console.error("Auth process error:", err);
       }
     };
 
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) await fetchAndSetProfile(session.user);
-      setIsLoading(false);
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await fetchAndSetProfile(session.user);
+        }
+      } catch (err) {
+        console.error("Session check error:", err);
+      } finally {
+        setIsInitialAuthLoading(false);
+      }
     };
 
-    checkUser();
+    initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        await fetchAndSetProfile(session.user);
-        setShowAuthModal(false);
-      } else {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          await fetchAndSetProfile(session.user);
+          setShowAuthModal(false);
+        }
+      } else if (event === 'SIGNED_OUT') {
         setIsLoggedIn(false);
         setCurrentUser(null);
+        setBalance('0.00');
       }
     });
 
