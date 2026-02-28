@@ -63,6 +63,7 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
 
   const [isRealServices, setIsRealServices] = useState(false);
+  const [servicesError, setServicesError] = useState<string | null>(null);
 
   // Combined Loading State - Only block UI for initial auth check
   const isLoading = isInitialAuthLoading;
@@ -80,15 +81,16 @@ export default function App() {
     const processServices = (data: any[]) => {
       const grouped: { [key: string]: Category } = {};
       data.forEach((svc: ApiService) => {
-        if (!grouped[svc.category]) {
-          const isFB = svc.category.toLowerCase().includes('facebook');
-          const isTT = svc.category.toLowerCase().includes('tiktok');
-          const isIG = svc.category.toLowerCase().includes('instagram');
-          const isYT = svc.category.toLowerCase().includes('youtube');
+        const categoryName = svc.category || 'Other Services';
+        if (!grouped[categoryName]) {
+          const isFB = categoryName.toLowerCase().includes('facebook');
+          const isTT = categoryName.toLowerCase().includes('tiktok');
+          const isIG = categoryName.toLowerCase().includes('instagram');
+          const isYT = categoryName.toLowerCase().includes('youtube');
           
-          grouped[svc.category] = {
-            id: svc.category,
-            name: svc.category,
+          grouped[categoryName] = {
+            id: categoryName,
+            name: categoryName,
             icon: isFB ? <Facebook className="w-4 h-4" /> : 
                   isTT ? <TrendingUp className="w-4 h-4" /> : 
                   isIG ? <Zap className="w-4 h-4" /> :
@@ -96,17 +98,21 @@ export default function App() {
             services: []
           };
         }
-        grouped[svc.category].services.push({
-          id: svc.service.toString(),
-          name: svc.name,
-          ratePer1000: (parseFloat(svc.rate) * USD_TO_BDT) + 5,
-          min: parseInt(svc.min),
-          max: parseInt(svc.max),
+        
+        const rate = parseFloat(svc.rate?.toString() || '0');
+        const rateInBDT = (rate * USD_TO_BDT) + 5;
+        
+        grouped[categoryName].services.push({
+          id: svc.service?.toString() || Math.random().toString(),
+          name: svc.name || 'Unknown Service',
+          ratePer1000: rateInBDT,
+          min: parseInt(svc.min?.toString() || '0'),
+          max: parseInt(svc.max?.toString() || '0'),
           description: [
             `Type: ${svc.type || 'Default'}`,
             `Refill: ${svc.refill ? 'Yes' : 'No'}`,
             `Cancel: ${svc.cancel ? 'Yes' : 'No'}`,
-            `Rate: ৳${((parseFloat(svc.rate) * USD_TO_BDT) + 5).toFixed(2)} per 1000`
+            `Rate: ৳${rateInBDT.toFixed(2)} per 1000`
           ]
         });
       });
@@ -133,6 +139,12 @@ export default function App() {
         });
         const data = await response.json();
         
+        if (data.error) {
+          console.error("MotherPanel API Error:", data.error);
+          setServicesError(data.error);
+          return;
+        }
+
         // Handle different possible response formats from SMM panels
         let servicesArray = [];
         if (Array.isArray(data)) {
@@ -147,10 +159,14 @@ export default function App() {
         if (servicesArray.length > 0) {
           processServices(servicesArray);
           setIsRealServices(true);
+          setServicesError(null);
           console.log(`Loaded ${servicesArray.length} real services from MotherPanel`);
+        } else {
+          setServicesError("No services found from provider.");
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error("Failed to fetch real services:", e);
+        setServicesError(e.message || "Failed to connect to provider.");
       }
     };
 
@@ -548,6 +564,7 @@ export default function App() {
           <NewOrder 
             isLoading={isServicesLoading}
             isRealServices={isRealServices}
+            servicesError={servicesError}
             categories={categories}
             selectedCategory={selectedCategory}
             selectedService={selectedService}

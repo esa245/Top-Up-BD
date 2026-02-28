@@ -7,6 +7,7 @@ import { paymentNumbers } from '../constants';
 interface NewOrderProps {
   isLoading: boolean;
   isRealServices: boolean;
+  servicesError: string | null;
   categories: Category[];
   selectedCategory: Category | null;
   selectedService: Service | null;
@@ -32,6 +33,7 @@ interface NewOrderProps {
 export const NewOrder: React.FC<NewOrderProps> = ({
   isLoading,
   isRealServices,
+  servicesError,
   categories,
   selectedCategory,
   selectedService,
@@ -96,12 +98,19 @@ export const NewOrder: React.FC<NewOrderProps> = ({
                   <Zap className="w-2.5 h-2.5" /> Real Services
                 </span>
               ) : (
-                <button 
-                  onClick={onRefreshServices}
-                  className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
-                >
-                  <Zap className="w-2.5 h-2.5" /> Load Real Services
-                </button>
+                <div className="flex items-center gap-2">
+                  {servicesError && (
+                    <span className="text-[10px] text-rose-500 font-medium" title={servicesError}>
+                      API Error
+                    </span>
+                  )}
+                  <button 
+                    onClick={onRefreshServices}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1"
+                  >
+                    <Zap className="w-2.5 h-2.5" /> Load Real Services
+                  </button>
+                </div>
               )}
             </div>
             <div className="relative">
@@ -128,7 +137,9 @@ export const NewOrder: React.FC<NewOrderProps> = ({
                 className="w-full bg-white border border-slate-200 rounded-2xl p-4 pr-12 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
               >
                 {selectedCategory?.services.map(svc => (
-                  <option key={svc.id} value={svc.id}>{svc.name}</option>
+                  <option key={svc.id} value={svc.id}>
+                    {svc.name} - ৳{svc.ratePer1000.toFixed(2)}
+                  </option>
                 ))}
               </select>
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
